@@ -1,4 +1,4 @@
-#include "Matrix.h"
+#include "lin_al.h"
 #include <cstdio>
 int main() {
     Matrix<float> temp(5, 5, 1.121);
