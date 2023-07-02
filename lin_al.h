@@ -5,6 +5,7 @@
 #include <sstream>
 #include <cmath>
 
+namespace LIN {
 template<size_t Rows, size_t Cols, typename Type = int>
 class Matrix {
 public:
@@ -14,6 +15,15 @@ public:
 
     Matrix(): data {new Type[Rows * Cols]} {
         memset(data, 0, Rows*Cols);
+    }
+
+    // init with a function that accept position (row and col) and spit out 1 number of type Type
+    Matrix(std::function<Type()> init_func): data {new Type[Rows * Cols]} {
+        for (size_t i = 0; i < Rows; i++) {
+            for (size_t j = 0; j < Cols; j++) {
+                this->data[i*Cols + j] = init_func();
+            }
+        }
     }
 
     // init with a function that accept position (row and col) and spit out 1 number of type Type
@@ -79,7 +89,7 @@ public:
             for (size_t j = 0; j < Cols; j++) {
                 ss << std::to_string((*this)[i][j]) << ' ';
             }
-            ss << "]\n";
+            ss << " ]\n";
         }
         return ss.str();
     }
@@ -91,9 +101,8 @@ protected:
 template<size_t Size, typename Type = int>
 class Vector: public Matrix<Size, 1, Type> {
 public:
-    Vector(): Matrix<Size, 1, Type>(0) {}
-    Vector(Type val): Matrix<Size, 1, Type>(val) {}
-    Vector(std::function<Type(size_t, size_t)> init_func): Matrix<Size, 1, Type>(init_func) {}
+    using Matrix<Size, 1, Type>::Matrix;
+    inline Type operator[](size_t index) { return (*this)[index][0]; }
     Type dot(const Vector<Size, Type>& that) {
         Type result {};
         for (size_t i = 0; i < Size; i++) {
@@ -109,3 +118,35 @@ public:
         return std::sqrt(len);
     }
 };
+
+template<typename Type>
+class Vector2: public Vector<2, Type> {
+public:
+    using Vector<2, Type>::Vector;
+    Vector2(Type x, Type y): Vector<2, Type>() { this->data[0] = x; this->data[1] = y; }
+    Type& x() { return this->data[0]; }
+    Type& y() { return this->data[1]; }
+};
+
+template<typename Type>
+class Vector3: public Vector<3, Type> {
+public:
+    using Vector<3, Type>::Vector;
+    Vector3(Type x, Type y, Type z) { this->data[0] = x; this->data[1] = y; this->data[2] = z; }
+    Type& x() { return this->data[0]; }
+    Type& y() { return this->data[1]; }
+    Type& z() { return this->data[2]; }
+};
+
+
+template<typename Type>
+class Vector4: public Vector<4, Type> {
+public:
+    using Vector<4, Type>::Vector;
+    Vector4(Type x, Type y, Type z, Type w) { this->data[0] = x; this->data[1] = y; this->data[2] = z; this->data[3] = w; }
+    Type& x() { return this->data[0]; }
+    Type& y() { return this->data[1]; }
+    Type& z() { return this->data[2]; }
+    Type& w() { return this->data[3]; }
+};
+}
