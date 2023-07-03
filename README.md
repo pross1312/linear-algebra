@@ -4,5 +4,5 @@ A single header file for Matrix and vector in c++
 
 Stb image to read and write image files for k-means
 
-- [stb_image]("https://github.com/nothings/stb")
-- [stb_image_write]("https://github.com/nothings/stb")
+- [stb_image](https://github.com/nothings/stb)
+- [stb_image_write](https://github.com/nothings/stb)
