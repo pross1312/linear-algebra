@@ -38,6 +38,12 @@ public:
         }
     }
 
+    explicit Matrix<Type, Rows, Cols>(const Type* data): // this constructor will copy
+        data{ new Type[Rows * Cols] } {
+            assert(data != nullptr && "Invalid data");
+            memcpy(this->data, data, Rows * Cols * sizeof(Type));
+    }
+
     Matrix<Type, Rows, Cols>(const Matrix<Type, Rows, Cols>& base): data {new Type[Rows * Cols]} {
         memcpy(this->data, base.data, sizeof(Type) * Rows * Cols);
     }
@@ -94,17 +100,23 @@ public:
         return result;
     }
 
+    friend std::ostream& operator<<(std::ostream& out, const Matrix<Type, Rows, Cols>& mat) {
+        for (size_t i = 0; i < Rows; i++) {
+            out << "[ ";
+            for (size_t j = 0; j < Cols; j++) {
+                out << std::to_string(mat[i][j]) << (j == Cols - 1 ? "" : " ");
+            }
+            out << " ]\n";
+        }
+        return out;
+    }
+
     std::string to_string() {
         std::stringstream ss;
-        for (size_t i = 0; i < Rows; i++) {
-            ss << "[ ";
-            for (size_t j = 0; j < Cols; j++) {
-                ss << std::to_string((*this)[i][j]) << ' ';
-            }
-            ss << " ]\n";
-        }
+        ss << (*this);
         return ss.str();
     }
+
     friend class MatrixXX<Type>;
 protected:
     Type* data;
@@ -116,11 +128,11 @@ public:
     using Matrix<Type, Size, 1>::Matrix;
     inline Type& operator[](size_t index) {
         assert(index < Size && "Index out of range");
-        return (*this)[index][0];
+        return this->data[index];
     }
     inline const Type& operator[](size_t index) const {
         assert(index < Size && "Index out of range");
-        return (*this)[index][0];
+        return this->data[index];
     }
 
     Type dot(const Vector<Type, Size>& that) {
@@ -220,6 +232,14 @@ public:
         }
     }
 
+    explicit MatrixXX<Type>(size_t rows, size_t cols, const Type* ref_data): // this will copy data
+        data{ new Type[rows * cols] },
+        nRows{ rows },
+        nCols{ cols } {
+            assert(data != nullptr && "Invalid data");
+            memcpy(this->data, ref_data, rows * cols * sizeof(Type));
+    }
+
     template<size_t Rows, size_t Cols>
     MatrixXX(const Matrix<Type, Rows, Cols>& base):
         data{ new Type[Rows*Cols] },
@@ -234,6 +254,7 @@ public:
     }
     inline size_t rows() const { return nRows; }
     inline size_t cols() const { return nCols; }
+    inline const Type* raw() const { return data; } 
     inline const Type* operator[](size_t row) const {
         assert(row < nRows && "Index out of range");
         return &this->data[row * nCols];
@@ -297,16 +318,20 @@ public:
         }
         return *this;
     }
+    friend std::ostream& operator<<(std::ostream& out, const MatrixXX<Type>& mat) {
+        for (size_t i = 0; i < mat.nRows; i++) {
+            out << "[ ";
+            for (size_t j = 0; j < mat.nCols; j++) {
+                out << std::to_string(mat[i][j]) << (j == mat.nCols - 1 ? "" : " ");
+            }
+            out << " ]\n";
+        }
+        return out;
+    }
 
     std::string to_string() {
         std::stringstream ss;
-        for (size_t i = 0; i < nRows; i++) {
-            ss << "[ ";
-            for (size_t j = 0; j < nCols; j++) {
-                ss << std::to_string((*this)[i][j]) << ' ';
-            }
-            ss << " ]\n";
-        }
+        ss << (*this);
         return ss.str();
     }
 
@@ -330,15 +355,18 @@ public:
     explicit VectorX<Type>(size_t size, std::function<Type()> init_func):
         MatrixXX<Type>(size, 1, init_func) {}
     explicit VectorX<Type>(size_t size, std::function<Type(size_t)> init_func):
-        MatrixXX<Type>(size, 1, init_func) {}
-
+        MatrixXX<Type>(size, 1) {
+            for (size_t i = 0; i < size; i++) this->data[i] = init_func(i);
+    }
+    explicit VectorX<Type>(size_t size, const Type* data):
+        MatrixXX<Type>(size, 1, data) {}
     inline Type& operator[](size_t index) {
         assert(index < this->nRows && "Index out of range");
-        return (*this)[index][0];
+        return this->data[index];
     }
     inline const Type& operator[](size_t index) const {
         assert(index < this->nRows && "Index out of range");
-        return (*this)[index][0];
+        return this->data[index];
     }
     inline size_t size() const { return this->nRows; }
 
