@@ -18,7 +18,7 @@ int main() {
     stbi_image_free(temp);
     stbi_write_png("image-data.png", x, y, 1, data.raw(), x * sizeof(data[0]));
 
-    const size_t k = 30;
+    const size_t k = 20;
     const size_t max_generation = 50;
     LIN::VectorX<unsigned char> means(k, [&]() { return data[rand()*1.0f/RAND_MAX * x * y]; });
     for (size_t i = 0; i < max_generation; i++) {
