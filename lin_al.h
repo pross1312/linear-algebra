@@ -12,6 +12,7 @@ class VectorX;
 // matrix and vector at runtime
 template<typename Type>
 class MatrixXX {
+    friend class VectorX<Type>;
 protected:
     MatrixXX<Type>(size_t rows, size_t cols, Type* data, bool borrowed): // special constructor
         data{ data },
@@ -22,9 +23,9 @@ public:
     virtual ~MatrixXX() {
         if (!this->isBorrowed) {
             delete[] data;
-            printf("Destructor called %zu times\n", ++destruction_times);
+            // printf("Destructor called %zu times\n", ++destruction_times);
         }
-        else printf("Can't delete borrowed data\n");
+        // else printf("Can't delete borrowed data\n");
     }
 // start define constructor
 // anywhere that isBorrowed is not initialized, it is default initialized to false
@@ -35,44 +36,34 @@ public:
             memset(data, 0, sizeof(Type) * rows * cols);
     }
 
-    explicit MatrixXX<Type>(size_t rows, size_t cols, Type val):
-        data{ new Type[rows * cols] },
-        nRows{ rows },
-        nCols{ cols } {
-            for (size_t i = 0; i < rows*cols; i++) data[i] = val;
+    explicit MatrixXX<Type>(size_t rows, size_t cols, Type val): MatrixXX<Type>(rows, cols) {
+        for (size_t i = 0; i < rows*cols; i++) data[i] = val;
     }
 
-    MatrixXX<Type>(const MatrixXX<Type>& base):
-        data{ new Type[base.nRows * base.nCols] },
-        nRows{ base.nRows },
-        nCols{ base.nCols } {
-            memcpy(this->data, base.data, base.nRows * base.nCols * sizeof(Type));
+    MatrixXX<Type>(const MatrixXX<Type>& base): MatrixXX<Type>(base.nRows, base.nCols) {
+        memcpy(this->data, base.data, base.nRows * base.nCols * sizeof(Type));
     }
 
-    // init with a function that accept position (row and col) and spit out 1 number of type Type
-    explicit MatrixXX<Type>(size_t rows, size_t cols, std::function<Type()> init_func):
-        data { new Type[rows * cols] },
-        nRows{ rows },
-        nCols{ cols } {
+    // init with a function that spit out a row
+    explicit MatrixXX<Type>(size_t rows, size_t cols, std::function<VectorX<Type>(size_t r)> init_func): MatrixXX<Type>(rows, cols) {
+        for (size_t r = 0; r < nRows; r++) {
+            const auto& row_vec = init_func(r);
+            memcpy(this->data + r*nCols, row_vec.data, nCols);
+        }
+    }
+
+    explicit MatrixXX<Type>(size_t rows, size_t cols, std::function<Type()> init_func): MatrixXX<Type>(rows, cols) {
         for (size_t i = 0; i < rows*cols; i++) data[i] = init_func();
     }
 
-    // init with a function that accept position (row and col) and spit out 1 number of type Type
-    explicit MatrixXX<Type>(size_t rows, size_t cols, std::function<Type(size_t, size_t)> init_func):
-        data{ new Type[rows * cols] },
-        nRows{ rows },
-        nCols{ cols } {
+    explicit MatrixXX<Type>(size_t rows, size_t cols, std::function<Type(size_t, size_t)> init_func): MatrixXX<Type>(rows, cols) {
         for (size_t i = 0; i < rows; i++) {
             for (size_t j = 0; j < cols; j++) {
                 data[i*cols + j] = init_func(i, j);
             }
         }
     }
-
-    explicit MatrixXX<Type>(size_t rows, size_t cols, const Type* ref_data): // this will copy data
-        data{ new Type[rows * cols] },
-        nRows{ rows },
-        nCols{ cols } {
+    explicit MatrixXX<Type>(size_t rows, size_t cols, const Type* ref_data): MatrixXX<Type>(rows, cosl) {  // this will copy data
             assert(data != nullptr && "Invalid data");
             memcpy(this->data, ref_data, rows * cols * sizeof(Type));
     }
@@ -90,8 +81,8 @@ public:
 
     inline size_t rows() const { return nRows; }
     inline size_t cols() const { return nCols; }
-    inline Type* raw() { return data; } 
-    inline const Type* raw() const { return data; } 
+    inline Type* raw() { return data; }
+    inline const Type* raw() const { return data; }
 
 // --------TODO check again seems dumb and dangerous--------------
     VectorX<Type> operator[](size_t row) {
@@ -108,9 +99,10 @@ public:
         }
         return true;
     }
+    bool operator!=(const MatrixXX<Type>& that) const { return !((*this) == that); }
 
-    const MatrixXX<Type> operator=(const MatrixXX<Type>& that) {
-        printf("Equal called\n");
+
+    constexpr MatrixXX<Type> operator=(const MatrixXX<Type>& that) {
         assert(nRows == that.nRows && nCols == that.nCols && "Invalid size");
         for (size_t i = 0; i < nRows * nCols; i++) {
             this->data[i] = that.data[i];
@@ -121,7 +113,7 @@ public:
     MatrixXX<Type> operator*(Type scalar) const {
         MatrixXX<Type> result(nRows, nCols);
         for (size_t i = 0; i < nRows * nCols; i++) {
-            result.data[i] = data[i] * scalar;
+            result.data[i] = this->data[i] * scalar;
         }
         return result;
     }
@@ -129,7 +121,7 @@ public:
     MatrixXX<Type> operator+(Type scalar) const {
         MatrixXX<Type> result(nRows, nCols);
         for (size_t i = 0; i < nRows * nCols; i++) {
-            result.data[i] = data[i] + scalar;
+            result.data[i] = this->data[i] + scalar;
         }
         return result;
     }
@@ -137,27 +129,30 @@ public:
     MatrixXX<Type> operator-(Type scalar) const {
         MatrixXX<Type> result(nRows, nCols);
         for (size_t i = 0; i < nRows * nCols; i++) {
-            result.data[i] = data[i] - scalar;
+            result.data[i] = this->data[i] - scalar;
         }
         return result;
     }
 
+
     MatrixXX<Type> operator/(Type scalar) const {
         MatrixXX<Type> result(nRows, nCols);
         for (size_t i = 0; i < nRows * nCols; i++) {
-            result.data[i] = data[i] / scalar;
+            result.data[i] = this->data[i] / scalar;
         }
         return result;
     }
+
 
     MatrixXX<Type> operator+(const MatrixXX<Type>& that) const {
         assert(this->nRows == that.nRows && this->nCols == that.nCols && "Invalid size");
         MatrixXX<Type> result(nRows, nCols);
         for (size_t i = 0; i < nRows * nCols; i++) {
-            result.data[i] = this->data[i] + that.data[i];
+            result.data[i] = this->data[i] + (that.data[i]);
         }
         return result;
     }
+
 
     MatrixXX<Type> operator-(const MatrixXX<Type>& that) const {
         assert(this->nRows == that.nRows && this->nCols == that.nCols && "Invalid size");
@@ -212,80 +207,7 @@ protected:
     bool isBorrowed = false; // this variable is used for access row ( return a borrowed data vector, borrowed data won't be freed -_- rust moment)
 };
 
-template<typename Type>
-class VectorX: public MatrixXX<Type> {
-private:
-    friend MatrixXX<Type>;
-    VectorX<Type>(size_t size, Type* data, bool borrowed): // a special constructor for operator[] of class MatrixXX
-        MatrixXX<Type>(size, 1, data, borrowed) {
-            this->isBorrowed = borrowed;
-            assert(data != nullptr && "Invalid data");
-        }
-public:
-    explicit VectorX<Type>(size_t size): MatrixXX<Type>(size, 1) {}
-
-    explicit VectorX<Type>(size_t size, Type val): MatrixXX<Type>(size, 1, val) {}
-
-    VectorX<Type>(const VectorX<Type>& base): MatrixXX<Type>(base) {} // power of polymorphism
-                                                                      //
-    // with this constructor, we can use some operators defined in MatrixXX class for this class as well 
-    // but these operator will create a temporary matrix which will be freed after data is copied into this VectorX
-    // which is ineffiecient
-    // TODO: define operator for this class as well
-    explicit VectorX<Type>(const MatrixXX<Type>& base): MatrixXX<Type>(base) {
-        assert(1 == this->nCols && "Invalid size");
-    }
-
-    explicit VectorX<Type>(size_t size, std::function<Type()> init_func):
-        MatrixXX<Type>(size, 1, init_func) {}
-
-    explicit VectorX<Type>(size_t size, std::function<Type(size_t)> init_func):
-        MatrixXX<Type>(size, 1) {
-            for (size_t i = 0; i < size; i++) this->data[i] = init_func(i);
-    }
-
-    explicit VectorX<Type>(size_t size, const Type* data):
-        MatrixXX<Type>(size, 1, data) {}
-
-    inline Type& operator[](size_t index) {
-        assert(index < this->nRows && "Index out of range");
-        return this->data[index];
-    }
-
-    inline const Type& operator[](size_t index) const {
-        assert(index < this->nRows && "Index out of range");
-        return this->data[index];
-    }
-
-    const VectorX<Type>& operator=(const VectorX<Type>& that) {
-        printf("Vector equal called\n");
-        assert(this->nRows == that.nRows && "Invalid size");
-        for (size_t i = 0; i < this->nRows; i++) {
-            this->data[i] = that.data[i];
-        }
-        return *this;
-    }
-
-    inline size_t size() const { return this->nRows; }
-
-    Type dot(const VectorX<Type>& that) {
-        assert(this->nRows == that.nRows && "Invalid size");
-        Type result {};
-        for (size_t i = 0; i < this->nRows; i++) {
-            result += this->data[i] * that.data[i];
-        }
-        return result;
-    }
-
-    float length() {
-        float len = 0;
-        for (size_t i = 0; i < this->nRows; i++) {
-            len += this->data[i] * this->data[i];
-        }
-        return std::sqrt(len);
-    }
-};
-
+/*
 //----------------------- static Matrix and Vector --------------------------
 //---------------------------------------------------------------------------
 //---------------------------------------------------------------------------
@@ -466,4 +388,5 @@ public:
 //-------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------
+*/
 }

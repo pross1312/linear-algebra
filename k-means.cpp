@@ -3,52 +3,73 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 #include "lin_al.h"
+#include "lin_vec.h"
+using namespace LIN;
+#define UNHEX(type, c) (type)((uint8_t)((c) >> 8 * 3) & (uint8_t)0xff)\
+                      ,(type)((uint8_t)((c) >> 8 * 2) & (uint8_t)0xff)\
+                      ,(type)((uint8_t)((c) >> 8)     & (uint8_t)0xff)\
+                      ,(type)((uint8_t)((c))          & (uint8_t)0xff)
 
-int main() {
+const size_t MAX_GENERATION = 50;
+int main(int argc, char** argv) {
     srand(time(0));
+    if (argc >= 4 || argc <= 1) {
+        fprintf(stderr, "ERROR: Invalid usage\n");
+        printf("Usage: k-means {filename} {k}\n");
+        return 1;
+    }
+    char* end = argv[2] + strlen(argv[2]);
+    size_t k = strtoul(argv[2], &end, 10);
+    printf("Image path: %s\n", argv[1]);
+    printf("K: %zu\n", k);
+
     int x, y, depth;
-    const char* img_path = "image.png";
-    unsigned char *temp = (unsigned char*)stbi_load(img_path, &x, &y, &depth, 1);
+    unsigned int* temp = (unsigned int*)stbi_load(argv[1], &x, &y, &depth, 4);
     if (temp == NULL) {
-        printf("ERROR: Can't load image %s\n", img_path);
+        printf("ERROR: Can't load image %s\n", argv[1]);
         return 1;
     }
     printf("Width: %d\nHeight: %d\nDepth: %d\n", x, y, depth);
-    LIN::VectorX<unsigned char> data(x * y, temp);
+    MatrixXX<unsigned char> data(x * y, 4, [&](size_t i, size_t j) -> size_t {
+    unsigned char temp_arr[] = {UNHEX(unsigned char, temp[i])};
+    return temp_arr[3 - j]; // RGBA because little endian so it becomes ABGR -_- maybe...
+    });
     stbi_image_free(temp);
-    stbi_write_png("image-data.png", x, y, 1, data.raw(), x * sizeof(data[0]));
+    MatrixXX<unsigned char> means(k, 4, [&]() -> size_t {
+        return data[rand()*1.0f/RAND_MAX*x][rand()*1.0f/RAND_MAX*4];
+    });
+    MatrixXX<unsigned char> classifies(x * y, 4);
+    MatrixXX<float> new_means(k, 4);
+    char output[128] {};
 
-    const size_t k = 20;
-    const size_t max_generation = 50;
-    LIN::VectorX<unsigned char> means(k, [&]() { return data[rand()*1.0f/RAND_MAX * x * y]; });
-    for (size_t i = 0; i < max_generation; i++) {
-        char output[128] {};
+    for (size_t i = 0; i < MAX_GENERATION; i++) {
         size_t* count = new size_t[k] {};
-        float* new_means = new float[k] {};
         bool change = false;
-        sprintf(output, "output/image-out-%02zu.png", i);
-        LIN::VectorX<unsigned char> classifies(x * y, [&](size_t index) -> unsigned char {
+        sprintf(output, "output/image-out-%02zu.png", 0ul);
+        for (size_t i = 0; i < size_t(x*y); i++) {
             float min = 9999999;
             unsigned char min_idx = 0;
             for (size_t j = 0; j < k; j++) {
-                float dis = (data[index] - means[j]) * (data[index] - means[j]);
+                const VectorX<unsigned char> color_diff{ data[i] - means[j] };
+                float dis = color_diff.dot(color_diff);
                 if (dis < min) {
                     min = dis;
                     min_idx = j;
                 }
             }
-            new_means[min_idx] += data[index];
-            count[min_idx]++;
-            return means[min_idx];
-        });
-        stbi_write_png(output, x, y, 1, classifies.raw(), x * sizeof(classifies[0]));
-        for (size_t i = 0; i < k; i++) {
-            new_means[i] /= count[i];
-            unsigned char new_k = (unsigned char)(std::round(new_means[i]));
-            if (new_k != means[i]) change = true;
-            means[i] = new_k;
+            count[i]++;
+            new_means[min_idx] = new_means[min_idx] + data[i];
+            classifies[i] = means[min_idx];
         }
-        delete[] new_means;
+        for (size_t i = 0; i < k; i++) {
+            new_means[i] = new_means[i] / k;
+            for (size_t j = 0; j < 4; j++) {
+                if ((unsigned char)new_means[i][j] != means[i][j]) change = true;
+                means[i][j] = (unsigned char)new_means[i][j];
+            }
+        }
+        stbi_write_png(output, x, y, 4, classifies.raw(), x * sizeof(unsigned int));
+
         delete[] count;
         if (!change) break;
     }
