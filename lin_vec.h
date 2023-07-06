@@ -24,6 +24,7 @@ public:
     // TODO: define operator for this class as well
     explicit VectorX<Type>(const MatrixXX<Type>& base): MatrixXX<Type>(base) {
         assert(1 == this->nCols && "Invalid size");
+        // printf("Construct vec with mat\n");
     }
 
     explicit VectorX<Type>(size_t size, std::function<Type()> init_func):
@@ -61,9 +62,7 @@ public:
 
     VectorX<Type>& operator=(const VectorX<Type>& that) {
         assert(this->nRows == that.nRows && "Invalid size");
-        for (size_t i = 0; i < this->nRows; i++) {
-            this->data[i] = that.data[i];
-        }
+        memcpy(this->data, that.raw(), this->nRows * sizeof(Type));
         return *this;
     }
 
@@ -117,6 +116,7 @@ public:
         for (size_t i = 0; i < this->nRows; i++) {
             result.data[i] = this->data[i] - that.data[i];
         }
+        // printf("Operator -\n");
         return result;
     }
 
@@ -151,6 +151,21 @@ public:
             len += this->data[i] * this->data[i];
         }
         return std::sqrt(len);
+    }
+    VectorX<Type>& unary_op(std::function<Type(Type)> func) {
+        for (size_t i = 0; i < this->nRows; i++) {
+            this->data[i] = func(this->data[i]);
+        }
+        return *this;
+    }
+
+    template<typename Op2Type>
+    VectorX<Type>& binary_op(const VectorX<Op2Type>& that, std::function<Type(Type, Op2Type)> func) {
+        assert(this->nRows == that.rows() && "Invalid size");
+        for (size_t i = 0; i < this->nRows; i++) {
+            this->data[i] = func(this->data[i], that.raw()[i]);
+        }
+        return *this;
     }
 };
 

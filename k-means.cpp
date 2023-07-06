@@ -10,7 +10,7 @@ using namespace LIN;
                       ,(type)((uint8_t)((c) >> 8)     & (uint8_t)0xff)\
                       ,(type)((uint8_t)((c))          & (uint8_t)0xff)
 
-const size_t MAX_GENERATION = 50;
+const size_t MAX_GENERATION = 2;
 int main(int argc, char** argv) {
     srand(time(0));
     if (argc >= 4 || argc <= 1) {
@@ -31,13 +31,18 @@ int main(int argc, char** argv) {
     }
     printf("Width: %d\nHeight: %d\nDepth: %d\n", x, y, depth);
     MatrixXX<unsigned char> data(x * y, 4, [&](size_t i, size_t j) -> size_t {
-    unsigned char temp_arr[] = {UNHEX(unsigned char, temp[i])};
-    return temp_arr[3 - j]; // RGBA because little endian so it becomes ABGR -_- maybe...
+        unsigned char temp_arr[] = {UNHEX(unsigned char, temp[i])};
+        return temp_arr[3 - j]; // RGBA because little endian so it becomes ABGR -_- maybe...
     });
     stbi_image_free(temp);
-    MatrixXX<unsigned char> means(k, 4, [&]() -> size_t {
-        return data[rand()*1.0f/RAND_MAX*x][rand()*1.0f/RAND_MAX*4];
+    stbi_write_png("image-data.png", x, y, 4, data.raw(), x * sizeof(unsigned int));
+
+    MatrixXX<unsigned char> means(k, 4, [&](size_t _) -> VectorX<unsigned char> {
+        return data[rand()*1.0f/RAND_MAX*x];
     });
+    printf("Means\n%s\n", means.to_string().c_str());
+
+
     MatrixXX<unsigned char> classifies(x * y, 4);
     MatrixXX<float> new_means(k, 4);
     char output[128] {};
@@ -45,10 +50,11 @@ int main(int argc, char** argv) {
     for (size_t i = 0; i < MAX_GENERATION; i++) {
         size_t* count = new size_t[k] {};
         bool change = false;
-        sprintf(output, "output/image-out-%02zu.png", 0ul);
+        sprintf(output, "output/image-out-%02zu.png", i);
         for (size_t i = 0; i < size_t(x*y); i++) {
             float min = 9999999;
             unsigned char min_idx = 0;
+            // printf("%zu ---------------Start---------------\n", i);
             for (size_t j = 0; j < k; j++) {
                 const VectorX<unsigned char> color_diff{ data[i] - means[j] };
                 float dis = color_diff.dot(color_diff);
@@ -57,8 +63,10 @@ int main(int argc, char** argv) {
                     min_idx = j;
                 }
             }
-            count[i]++;
-            new_means[min_idx] = new_means[min_idx] + data[i];
+            count[min_idx]++;
+            new_means[min_idx].binary_op<unsigned char>(data[i], [](auto x, auto y) {
+                return x + (float)y;
+            });
             classifies[i] = means[min_idx];
         }
         for (size_t i = 0; i < k; i++) {

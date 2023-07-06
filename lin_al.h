@@ -32,7 +32,8 @@ public:
     explicit MatrixXX<Type>(size_t rows, size_t cols):
         data{ new Type[rows * cols] },
         nRows{ rows },
-        nCols{ cols } {
+        nCols{ cols },
+        isBorrowed{ false } {
             memset(data, 0, sizeof(Type) * rows * cols);
     }
 
@@ -63,6 +64,8 @@ public:
             }
         }
     }
+
+
     explicit MatrixXX<Type>(size_t rows, size_t cols, const Type* ref_data): MatrixXX<Type>(rows, cosl) {  // this will copy data
             assert(data != nullptr && "Invalid data");
             memcpy(this->data, ref_data, rows * cols * sizeof(Type));
@@ -104,9 +107,7 @@ public:
 
     constexpr MatrixXX<Type> operator=(const MatrixXX<Type>& that) {
         assert(nRows == that.nRows && nCols == that.nCols && "Invalid size");
-        for (size_t i = 0; i < nRows * nCols; i++) {
-            this->data[i] = that.data[i];
-        }
+        memcpy(this->data, that.data, this->nRows * this->nCols * sizeof(Type));
         return *this;
     }
 
@@ -175,12 +176,19 @@ public:
         }
         return result;
     }
-
-    MatrixXX<Type>& transform(std::function<Type(Type)> func) {
+    MatrixXX<Type>& unary_op(std::function<Type(Type)> func) {
         for (size_t i = 0; i < nRows * nCols; i++) {
             data[i] = func(data[i]);
         }
         return *this;
+    }
+
+    template<typename Op2Type>
+    MatrixXX<Type>& binary_op(const MatrixXX<Op2Type>& that, std::function<Type(Type, Op2Type)> func) {
+        assert(this->nRows == that.nRows && this->nCols == that.nCols && "Invalid size");
+        for (size_t i = 0; i < nRows * nCols; i++) {
+            this->data[i] = func(this->data[i], that.data[i]);
+        }
     }
 
     friend std::ostream& operator<<(std::ostream& out, const MatrixXX<Type>& mat) {
