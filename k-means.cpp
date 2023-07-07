@@ -16,7 +16,7 @@ int main(int argc, char** argv) {
     srand(time(0));
     if (argc > 4 || argc < 2) {
         fprintf(stderr, "ERROR: Invalid usage\n");
-        printf("Usage: k-centroids {filename} {k = 3} {MAX_ITER = 10}\n");
+        printf("Usage: k-means {filename} {k = 3} {MAX_ITER = 10}\n");
         return 1;
     }
     size_t k_clusters = (argc >= 3 ? (size_t)std::stoi(argv[2]) : 3);
