@@ -6,3 +6,8 @@ Stb image to read and write image files for k-means
 
 - [stb_image](https://github.com/nothings/stb)
 - [stb_image_write](https://github.com/nothings/stb)
+
+## Examples
+```k-means
+$ ./k-means {filename} {k = 3} {MAX_ITER = 10}
+```

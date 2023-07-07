@@ -4,80 +4,77 @@
 #include "stb_image_write.h"
 #include "lin_al.h"
 #include "lin_vec.h"
+#include <fstream>
+#include <iostream>
 using namespace LIN;
 #define UNHEX(type, c) (type)((uint8_t)((c) >> 8 * 3) & (uint8_t)0xff)\
                       ,(type)((uint8_t)((c) >> 8 * 2) & (uint8_t)0xff)\
                       ,(type)((uint8_t)((c) >> 8)     & (uint8_t)0xff)\
                       ,(type)((uint8_t)((c))          & (uint8_t)0xff)
 
-const size_t MAX_GENERATION = 2;
 int main(int argc, char** argv) {
     srand(time(0));
-    if (argc >= 4 || argc <= 1) {
+    if (argc > 4 || argc < 2) {
         fprintf(stderr, "ERROR: Invalid usage\n");
-        printf("Usage: k-means {filename} {k}\n");
+        printf("Usage: k-centroids {filename} {k = 3} {MAX_ITER = 10}\n");
         return 1;
     }
-    char* end = argv[2] + strlen(argv[2]);
-    size_t k = strtoul(argv[2], &end, 10);
-    printf("Image path: %s\n", argv[1]);
-    printf("K: %zu\n", k);
-
-    int x, y, depth;
-    unsigned int* temp = (unsigned int*)stbi_load(argv[1], &x, &y, &depth, 4);
+    size_t k_clusters = (argc >= 3 ? (size_t)std::stoi(argv[2]) : 3);
+    const size_t MAX_ITER = (argc >= 4 ? (size_t)std::stoi(argv[3]) : 10);
+    int width, height, depth;
+    unsigned int* temp = (unsigned int*)stbi_load(argv[1], &width, &height, &depth, 4);
     if (temp == NULL) {
         printf("ERROR: Can't load image %s\n", argv[1]);
         return 1;
     }
-    printf("Width: %d\nHeight: %d\nDepth: %d\n", x, y, depth);
-    MatrixXX<unsigned char> data(x * y, 4, [&](size_t i, size_t j) -> size_t {
+
+    MatrixXX<unsigned char> data(width * height, 4, [&](size_t i, size_t j) -> size_t {
         unsigned char temp_arr[] = {UNHEX(unsigned char, temp[i])};
         return temp_arr[3 - j]; // RGBA because little endian so it becomes ABGR -_- maybe...
     });
     stbi_image_free(temp);
-    stbi_write_png("image-data.png", x, y, 4, data.raw(), x * sizeof(unsigned int));
+    stbi_write_png("image-data.png", width, height, 4, data.raw(), width * sizeof(unsigned int));
 
-    MatrixXX<unsigned char> means(k, 4, [&](size_t _) -> VectorX<unsigned char> {
-        return data[rand()*1.0f/RAND_MAX*x];
+    MatrixXX<unsigned char> centroids(k_clusters, 4, [&](size_t _) {
+        return data[rand() * 1.f / RAND_MAX * (width - 1)];
     });
-    printf("Means\n%s\n", means.to_string().c_str());
 
-
-    MatrixXX<unsigned char> classifies(x * y, 4);
-    MatrixXX<float> new_means(k, 4);
-    char output[128] {};
-
-    for (size_t i = 0; i < MAX_GENERATION; i++) {
-        size_t* count = new size_t[k] {};
+    MatrixXX<unsigned char> classifies(width * height, 4);
+    MatrixXX<float> sum_data(k_clusters, 4);
+    for (size_t img = 0; img < MAX_ITER; img++) {
+        char output_img[128] {};
+        size_t *count = new size_t[k_clusters] {};
         bool change = false;
-        sprintf(output, "output/image-out-%02zu.png", i);
-        for (size_t i = 0; i < size_t(x*y); i++) {
-            float min = 9999999;
-            unsigned char min_idx = 0;
-            // printf("%zu ---------------Start---------------\n", i);
-            for (size_t j = 0; j < k; j++) {
-                const VectorX<unsigned char> color_diff{ data[i] - means[j] };
-                float dis = color_diff.dot(color_diff);
-                if (dis < min) {
-                    min = dis;
-                    min_idx = j;
-                }
+        sprintf(output_img, "output/image%03zu.png", img);
+
+        for (size_t px = 0; px < (size_t)width * (size_t)height; px++) {
+            float min_diff = 1e10;
+            size_t min_idx = 0;
+            for (size_t mean_idx = 0; mean_idx < k_clusters; mean_idx++) {
+                 float temp_min = .0f;
+                 for (size_t comp = 0; comp < 4; comp++) {
+                     temp_min += (data[px][comp] - centroids[mean_idx][comp]) * (data[px][comp] - centroids[mean_idx][comp]);
+                 }
+                 if (temp_min < min_diff) {
+                     min_diff = temp_min;
+                     min_idx = mean_idx;
+                 }
             }
             count[min_idx]++;
-            new_means[min_idx].binary_op<unsigned char>(data[i], [](auto x, auto y) {
+            sum_data[min_idx].binary_op<unsigned char>(data[px], [](auto x, auto y) {
                 return x + (float)y;
             });
-            classifies[i] = means[min_idx];
+            classifies[px] = centroids[min_idx];
         }
-        for (size_t i = 0; i < k; i++) {
-            new_means[i] = new_means[i] / k;
-            for (size_t j = 0; j < 4; j++) {
-                if ((unsigned char)new_means[i][j] != means[i][j]) change = true;
-                means[i][j] = (unsigned char)new_means[i][j];
+        for (size_t mean_idx = 0; mean_idx < k_clusters; mean_idx++) {
+            for (size_t comp = 0; comp < 4; comp++) {
+                unsigned char temp = (unsigned char)(sum_data[mean_idx][comp] / count[mean_idx]);
+                if (temp != centroids[mean_idx][comp]) change = true;
+                centroids[mean_idx][comp] = temp;
+                sum_data[mean_idx][comp] = 0.f;
             }
         }
-        stbi_write_png(output, x, y, 4, classifies.raw(), x * sizeof(unsigned int));
-
+        stbi_write_png(output_img, width, height, 4, classifies.raw(), width * sizeof(unsigned int));
         delete[] count;
         if (!change) break;
     }

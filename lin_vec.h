@@ -140,7 +140,7 @@ public:
         assert(this->nRows == that.nRows && "Invalid size");
         Type result {};
         for (size_t i = 0; i < this->nRows; i++) {
-            result += this->data[i] * that.data[i];
+            result += (float)this->data[i] * (float)that.data[i];
         }
         return result;
     }
