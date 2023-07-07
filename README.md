@@ -9,5 +9,5 @@ Stb image to read and write image files for k-means
 
 ## Examples
 ```k-means
-$ ./k-means {filename} {k = 3} {MAX_ITER = 10}
+$ ./k-means {filename} {fileout = IMAGE_OUTPUT.png} {k = 3} {MAX_ITER = 10}
 ```
