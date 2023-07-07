@@ -4,8 +4,6 @@
 #include "stb_image_write.h"
 #include "lin_al.h"
 #include "lin_vec.h"
-#include <fstream>
-#include <iostream>
 #include <sys/stat.h>
 #include <errno.h>
 #include <sys/types.h>
@@ -17,15 +15,15 @@ using namespace LIN;
 
 int main(int argc, char** argv) {
     srand(time(0));
-    if (argc > 4 || argc < 2) {
+    if (argc > 5 || argc < 3) {
         fprintf(stderr, "ERROR: Invalid usage\n");
-        printf("Usage: k-means {filename} {fileout = IMAGE_OUTPUT.png} {k = 3} {MAX_ITER = 10}\n");
+        printf("Usage: k-means {filename} {fileout} {k = 3} {MAX_ITER = 10}\n");
         return 1;
     }
     const char* file_in   = argv[1];
-    const char* file_out  = argc >= 3 ? argv[1] : "IMAGE_OUTPUT.png";
-    size_t k_clusters     = argc >= 4 ? (size_t)std::stoi(argv[2]) : 3;
-    const size_t MAX_ITER = argc >= 5 ? (size_t)std::stoi(argv[3]) : 10;
+    const char* file_out  = argv[2];
+    size_t k_clusters     = argc >= 4 ? (size_t)std::stoi(argv[3]) : 3;
+    const size_t MAX_ITER = argc >= 5 ? (size_t)std::stoi(argv[4]) : 10;
 
     int width, height, depth;
     unsigned int* temp = (unsigned int*)stbi_load(file_in, &width, &height, &depth, 4);
@@ -46,7 +44,8 @@ int main(int argc, char** argv) {
     MatrixXX<unsigned char> classifies(width * height, 4);
     MatrixXX<float>         sum_data(k_clusters, 4);
 
-    for (size_t img = 0; img < MAX_ITER; img++) {
+    size_t img_idx = 0;
+    for (img_idx = 0; img_idx < MAX_ITER; img_idx++) {
         size_t *count = new size_t[k_clusters] {};
         bool change   = false;
 
@@ -80,6 +79,7 @@ int main(int argc, char** argv) {
         delete[] count;
         if (!change) break;
     }
+    printf("Finish at %zu iterations\n", img_idx);
     stbi_write_png(file_out, width, height, 4, classifies.raw(), width * sizeof(unsigned int));
     return 0;
 }
