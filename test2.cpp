@@ -13,7 +13,7 @@ int main() {
     mat1[0].unary_transform([](float a) {
         return a + 3;
     });
-    std::cout << mat1[0][100] << "\n";
+    std::cout << mat1[0][0] << "\n";
     std::cout << mat2 << "\n";
     std::cout << mat1 << "\n";
     std::cout << mat1 * mat2 << "\n";
