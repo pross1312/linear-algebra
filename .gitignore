@@ -36,3 +36,5 @@ eigen
 *.exe
 *.out
 *.app
+*.png
+*.jpg
