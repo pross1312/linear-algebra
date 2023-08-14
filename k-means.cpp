@@ -4,7 +4,7 @@
 #include "stb_image_write.h"
 // #include "lin_al.h"
 // #include "lin_vec.h"
-#include "lin_al_test.h"
+#include "lin_al.h"
 #include <sys/stat.h>
 #include <errno.h>
 #include <sys/types.h>
@@ -31,18 +31,18 @@ int main(int argc, char** argv) {
         printf("ERROR: Can't load image %s\n", file_in);
         return 1;
     }
-    MatrixXX<uint8_t> data(width * height, 4, [&temp](size_t i, size_t j) -> size_t {
+    MatrixX<uint8_t> data(width * height, 4, [&temp](size_t i, size_t j) -> size_t {
         uint8_t temp_arr[] = {UNHEX(uint8_t, temp[i])};
         return temp_arr[3 - j]; // RGBA because little endian so it becomes ABGR -_- maybe...
     });
     stbi_image_free(temp);
 
-    MatrixXX<uint8_t> centroids(k_clusters, 4, [&data, width](size_t _) {
-        return data[rand() * 1.f / RAND_MAX * (width - 1)];
+    MatrixX<uint8_t> centroids(k_clusters, 4, [&data, width](size_t _) {
+        return data[rand() * 1.f / RAND_MAX * (width - 1) + _*0/* to turn of warning */];
     });
 
-    MatrixXX<uint8_t> classifies(width * height, 4);
-    MatrixXX<float>         sum_data(k_clusters, 4);
+    MatrixX<uint8_t> classifies(width * height, 4);
+    MatrixX<float>         sum_data(k_clusters, 4);
 
     size_t img_idx = 0;
     for (img_idx = 0; img_idx < MAX_ITER; img_idx++) {
@@ -82,6 +82,6 @@ int main(int argc, char** argv) {
     }
     printf("Finish at %zu iterations\n", img_idx);
     printf("%s\n, width: %d, height: %d\n", file_out, width, height);
-    stbi_write_png(file_out, width, height, 4, classifies.raw(), 0);
+    stbi_write_png(file_out, width, height, 4, classifies.data, 0);
     return 0;
 }

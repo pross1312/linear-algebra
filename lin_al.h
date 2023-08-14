@@ -8,11 +8,12 @@
 
 inline size_t count = 0;
 template<typename Type> class RowVectorX;
+template<typename Type> class VectorX;
 template<typename Type>
-class MatrixXX {
+class MatrixX {
 private:
     friend class RowVectorX<Type>;
-    MatrixXX(size_t Rows, size_t Cols, Type* data, bool borrowed):
+    MatrixX(size_t Rows, size_t Cols, Type* data, bool borrowed):
         nRows         { Rows     },
         nCols         { Cols     },
         data          { data     },
@@ -24,10 +25,10 @@ public:
     template<typename Op2Type>
     using BiTypeFunc     = std::function<Type(Type, Op2Type)>;
     using UnaryTypeFunc  = std::function<Type(Type)>;
-    virtual ~MatrixXX() {
+    virtual ~MatrixX() {
         if (!borrowed_data) delete[] data;
     }
-    explicit MatrixXX(size_t Rows, size_t Cols):
+    explicit MatrixX(size_t Rows, size_t Cols):
         nRows         { Rows                   },
         nCols         { Cols                   },
         data          { new Type[Rows*Cols] {} },
@@ -35,15 +36,15 @@ public:
             memset(data, 0, nRows*nCols);
     }
 
-    explicit MatrixXX(size_t Rows, size_t Cols, Type val): MatrixXX(Rows, Cols) {
+    MatrixX(const MatrixX& base): MatrixX(base.nRows, base.nCols) {
+        memcpy(this->data, base.data, nRows*nCols*sizeof(Type));
+    }
+
+    explicit MatrixX(size_t Rows, size_t Cols, Type val): MatrixX(Rows, Cols) {
         for (size_t i = 0;  i < Rows*Cols; i++) data[i] = val;
     }
 
-    MatrixXX(const MatrixXX& base): MatrixXX(base.nRows, base.nCols) {
-        memcpy(this->data, base.data, nRows*nCols);
-    }
-
-    explicit MatrixXX(size_t Rows, size_t Cols, const BiIndexFunc& init_func): MatrixXX(Rows, Cols) {
+    explicit MatrixX(size_t Rows, size_t Cols, const BiIndexFunc& init_func): MatrixX(Rows, Cols) {
         for (size_t row = 0; row < nRows; row++) {
             for (size_t col = 0; col < nCols; col++) {
                 data[row*Cols + col] = init_func(row, col);
@@ -51,13 +52,13 @@ public:
         }
     }
 
-    explicit MatrixXX(size_t Rows, size_t Cols, const UnaryIndexFunc& init_func): MatrixXX(Rows, Cols) {
+    explicit MatrixX(size_t Rows, size_t Cols, const UnaryIndexFunc& init_func): MatrixX(Rows, Cols) {
         for (size_t i = 0; i < nRows; i++) {
             memcpy(&this->data[i*nCols], init_func(i).data, nCols*sizeof(Type));
         }
     }
 
-    explicit MatrixXX(size_t Rows, size_t Cols, const NoIndexFunc& init_func): MatrixXX(Rows, Cols) {
+    explicit MatrixX(size_t Rows, size_t Cols, const NoIndexFunc& init_func): MatrixX(Rows, Cols) {
         for (size_t i = 0; i < nRows*nCols; i++) data[i] = init_func();
     }
 
@@ -71,12 +72,22 @@ public:
         return data[r*nCols + c];
     }
 
-    inline size_t rows() const { return nRows; }
-    inline size_t cols() const { return nCols; }
-    inline const Type*  raw()  const { return data;  }
-    inline Type*  raw()  { return data;  }
+    inline size_t size() const { return nRows*nCols; }
 
-    inline const MatrixXX& operator=(const MatrixXX& object) {
+    inline const MatrixX& replace_with(const MatrixX& object) {
+        this->nRows = object.nRows;
+        this->nCols = object.nCols;
+        delete[] this->data;
+        this->data = new Type[object.size()];
+        memcpy(this->data, object.data, object.size()*sizeof(Type));
+        return *this;
+    }
+
+    inline const MatrixX& operator=(const MatrixX& object) {
+        if (!(this->nRows == object.nRows && this->nCols == object.nCols)) {
+            printf("%zu %zu\n%zu %zu\n", this->nRows, this->nCols, object.nRows, object.nCols);
+        }
+        assert(this->nRows == object.nRows && this->nCols == object.nCols);
         memcpy(this->data, object.data, nRows*nCols);
         return *this;
     }
@@ -86,11 +97,39 @@ public:
     }
 
     template<typename Op2Type>
-    inline MatrixXX<Type> operator*(const MatrixXX<Op2Type>& that) const {
-        assert(this->nCols == that.rows() && "Invalid size");
-        MatrixXX<Type> result(this->nRows, that.cols());
+    inline MatrixX<Type> operator+(const MatrixX<Op2Type>& that) const {
+        return bi_transformed<Op2Type>(that, [](Type a, Op2Type b) { return a + Type(b); });
+    }
+
+    template<typename Op2Type>
+    inline void operator+=(const MatrixX<Op2Type>& that) {
+        bi_transform<Op2Type>(that, [](Type a, Op2Type b) { return a + Type(b); });
+    }
+
+    template<typename Op2Type>
+    inline MatrixX<Type> operator-(const MatrixX<Op2Type>& that) const {
+        return bi_transformed<Op2Type>(that, [](Type a, Op2Type b) { return a - type(b); });
+    }
+
+    template<typename Op2Type>
+    inline void operator-=(const MatrixX<Op2Type>& that) {
+        bi_transform<Op2Type>(that, [](Type a, Op2Type b) { return a - type(b); });
+    }
+
+    inline MatrixX<Type> operator*(Type scalar) const {
+        return unary_transformed([&scalar](Type a) { return scalar * a; });
+    }
+
+    inline void operator*=(Type scalar) {
+        unary_transform([&scalar](Type a) { return scalar * a; });
+    }
+
+    template<typename Op2Type>
+    inline MatrixX<Type> operator*(const MatrixX<Op2Type>& that) const {
+        assert(this->nCols == that.nRows && "Invalid size");
+        MatrixX<Type> result(this->nRows, that.nCols);
         for (size_t r = 0; r < this->nRows; r++) {
-            for (size_t c = 0; c < that.cols(); c++) {
+            for (size_t c = 0; c < that.nCols; c++) {
                 for (size_t i = 0; i < this->nCols; i++) {
                     result.at(r, c) += this->at(r, i) * (Type)that.at(i, c);
                 }
@@ -100,16 +139,30 @@ public:
     }
 
     template<typename Op2Type>
-    inline void bi_transform(const MatrixXX<Op2Type>& object, const BiTypeFunc<Op2Type>& func) {
-        assert(this->nRows == object.rows() && this->nCols == object.cols());
-        for (size_t i = 0; i < nRows*nCols; i++) data[i] = (Type)func(this->data[i], object.raw()[i]);
+    inline MatrixX bi_transformed(const MatrixX<Op2Type>& object, const BiTypeFunc<Op2Type>& func) const {
+        assert(this->nRows == object.nRows && this->nCols == object.nCols);
+        MatrixX<Type> result(nRows, nCols);
+        for (size_t i = 0; i < nRows*nCols; i++) result.data[i] = (Type)func(this->data[i], object.data[i]);
+        return result;
+    }
+
+    inline MatrixX unary_transformed(const UnaryTypeFunc& func) const {
+        MatrixX<Type> result(nRows, nCols);
+        for (size_t i = 0; i < nRows*nCols; i++) result.data[i] = func(data[i]);
+        return result;
+    }
+
+    template<typename Op2Type>
+    inline void bi_transform(const MatrixX<Op2Type>& object, const BiTypeFunc<Op2Type>& func) {
+        assert(this->nRows == object.nRows && this->nCols == object.nCols);
+        for (size_t i = 0; i < nRows*nCols; i++) this->data[i] = (Type)func(this->data[i], object.data[i]);
     }
 
     inline void unary_transform(const UnaryTypeFunc& func) {
-        for (size_t i = 0; i < nRows*nCols; i++) data[i] = func(data[i]);
+        for (size_t i = 0; i < nRows*nCols; i++) this->data[i] = func(data[i]);
     }
 
-    friend std::ostream& operator<<(std::ostream& out, const MatrixXX<Type>& mat) {
+    friend std::ostream& operator<<(std::ostream& out, const MatrixX<Type>& mat) {
         for (size_t i = 0; i < mat.nRows; i++) {
             out << "[ ";
             for (size_t j = 0; j < mat.nCols; j++) {
@@ -125,8 +178,8 @@ public:
         ss << (*this);
         return ss.str();
     }
+    inline operator VectorX<Type>() const { return VectorX(*this); } // OK if done through typedef
 
-protected:
     size_t nRows;
     size_t nCols;
     Type* data;
@@ -134,71 +187,76 @@ protected:
 };
 
 template<typename Type>
-class RowVectorX: public MatrixXX<Type> {
+class RowVectorX: public MatrixX<Type> {
 private:
-    friend class MatrixXX<Type>;
-    RowVectorX(size_t size, Type* data, bool borrowed): MatrixXX<Type>(1, size, data, borrowed) {}
+    friend class MatrixX<Type>;
+    RowVectorX(size_t size, Type* data, bool borrowed): MatrixX<Type>(1, size, data, borrowed) {}
 public:
-    using Base           = MatrixXX<Type>;
-    using UnaryIndexFunc = std::function<Type(size_t)>;
-    using NoIndexFunc    = std::function<Type()>;
     template<typename Op2Type>
     using BiTypeFunc     = std::function<Type(Type, Op2Type)>;
+    using Base           = MatrixX<Type>;
+    using UnaryIndexFunc = std::function<Type(size_t)>;
+    using NoIndexFunc    = std::function<Type()>;
     using Base::unary_transform;
+    using Base::unary_transformed;
+    using Base::bi_transform;
+    using Base::bi_transformed;
     using Base::to_string;
+    using Base::operator=;
+    using Base::operator+;
+    using Base::operator-;
+    using Base::operator*;
+    using Base::operator+=;
+    using Base::operator-=;
+    using Base::operator*=;
+    using Base::size;
+    RowVectorX(const RowVectorX& base)                                                  : Base(base) {}
     explicit RowVectorX(size_t size)                                                    : Base(1, size) {}
     explicit RowVectorX(size_t size, Type val)                                          : Base(1, size, val) {}
     explicit RowVectorX(size_t size, Type* data)                                        : RowVectorX() { memcpy(this->data, data, size*sizeof(Type)); }
     explicit RowVectorX(size_t size, std::function<Type(size_t r, size_t c)> init_func) : Base(1, size, init_func) {}
-    RowVectorX(const RowVectorX& base)                                                  : Base(base) {}
     explicit RowVectorX(size_t size, const UnaryIndexFunc& init_func)                   : Base(1, size, init_func) {}
     explicit RowVectorX(size_t size, const NoIndexFunc&    init_func)                   : Base(1, size, init_func) {}
 
     inline       Type&  operator[](size_t index)       { return this->at(0, index); }
     inline const Type&  operator[](size_t index) const { return this->at(0, index); }
-    inline const RowVectorX operator=(const RowVectorX& object) {
-        assert(this->cols() == object.cols());
-        memcpy(this->raw(), object.raw(), this->cols()*sizeof(Type));
-        return *this;
-    }
-
-    template<typename Op2Type>
-    inline void bi_transform(const RowVectorX<Op2Type>& object, const BiTypeFunc<Op2Type>& func) {
-        (*this).Base::bi_transform(object, func);
-    }
+    inline const RowVectorX& operator=(const RowVectorX& that) { Base::operator=(that); return *this; }
 };
 
-template<typename Type, size_t Rows, size_t Cols>
-class Matrix: public MatrixXX<Type> {
+template<typename Type>
+class VectorX: public MatrixX<Type> {
 public:
-    using Base           = MatrixXX<Type>;
-    using BiIndexFunc    = std::function<Type(size_t r, size_t c)>;
-    using UnaryIndexFunc = std::function<Type(size_t i)>;
-    using NoIndexFunc    = std::function<Type()>;
     template<typename Op2Type>
     using BiTypeFunc     = std::function<Type(Type, Op2Type)>;
+    using Base           = MatrixX<Type>;
+    using UnaryIndexFunc = std::function<Type(size_t)>;
+    using NoIndexFunc    = std::function<Type()>;
     using Base::unary_transform;
-    using Base::at;
+    using Base::unary_transformed;
+    using Base::bi_transform;
+    using Base::bi_transformed;
     using Base::to_string;
+    using Base::operator=;
+    using Base::operator+;
+    using Base::operator-;
+    using Base::operator*;
+    using Base::operator+=;
+    using Base::operator-=;
+    using Base::operator*=;
+    using Base::size;
+    VectorX(const VectorX& base)                                                     : Base(base) {}
+    explicit VectorX(size_t size)                                                    : Base(size, 1) {}
+    explicit VectorX(size_t size, Type val)                                          : Base(size, 1, val) {}
+    explicit VectorX(size_t size, Type* data)                                        : VectorX()
+        { memcpy(this->data, data, size*sizeof(Type)); }
+    explicit VectorX(size_t size, std::function<Type(size_t r, size_t c)> init_func) : Base(size, 1, init_func) {}
+    explicit VectorX(size_t size, const UnaryIndexFunc& init_func)                   : Base(size, 1, init_func) {}
+    explicit VectorX(size_t size, const NoIndexFunc&    init_func)                   : Base(size, 1, init_func) {}
+    explicit VectorX(const MatrixX<Type>& base)                                      : Base(base) {}
 
-    explicit Matrix()                                                  : Base(Rows, Cols) {}
-    explicit Matrix(Type val)                                          : Base(Rows, Cols, val) {}
-    explicit Matrix(Type* data)                                        : Matrix() { memcpy(this->data, data, Rows*Cols*sizeof(Type)); }
-    explicit Matrix(std::function<Type(size_t r, size_t c)> init_func) : Base(Rows, Cols, init_func) {}
-    Matrix(const Matrix& base)                                         : Base(base) {}
-    explicit Matrix(const BiIndexFunc&    init_func)                   : Base(Rows, Cols, init_func) {}
-    explicit Matrix(const UnaryIndexFunc& init_func)                   : Base(Rows, Cols, init_func) {}
-    explicit Matrix(const NoIndexFunc&    init_func)                   : Base(Rows, Cols, init_func) {}
-
-    template<typename Op2Type, size_t Op2Cols>
-    inline Matrix<Type, Rows, Op2Cols> operator*(const Matrix<Op2Type, Cols, Op2Cols>& object) {
-        MatrixXX<Type> temp = (*this).Base::operator*(object);
-        Matrix<Type, Rows, Op2Cols> result(temp.raw());
-        return result;
-    }
-
-    template<typename Op2Type>
-    inline void bi_transform(const Matrix<Op2Type, Rows, Cols>& object, const BiTypeFunc<Op2Type>& func) {
-        (*this).Base::bi_transform(object, func);
-    }
+    inline       Type&  operator[](size_t index)       { return this->at(index, 0); }
+    inline const Type&  operator[](size_t index) const { return this->at(index, 0); }
+    inline const VectorX& operator=(const VectorX& that) { Base::operator=(that); return *this; }
 };
+using VectorXf = VectorX<float>;
+using MatrixXf = MatrixX<float>;
