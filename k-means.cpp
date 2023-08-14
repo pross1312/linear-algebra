@@ -5,6 +5,7 @@
 // #include "lin_al.h"
 // #include "lin_vec.h"
 #include "lin_al.h"
+#include <iostream>
 #include <sys/stat.h>
 #include <errno.h>
 #include <sys/types.h>
@@ -49,7 +50,7 @@ int main(int argc, char** argv) {
         size_t *count = new size_t[k_clusters] {};
         bool change   = false;
 
-        for (size_t px = 0; px < (size_t)width * (size_t)height; px++) {
+        for (size_t px = 0; px < data.nRows; px++) {
             float min_diff = 1e10;
             size_t min_idx = 0;
             for (size_t mean_idx = 0; mean_idx < k_clusters; mean_idx++) {
@@ -64,24 +65,22 @@ int main(int argc, char** argv) {
                  }
             }
             count[min_idx]++;
-            sum_data[min_idx].bi_transform<uint8_t>(data[px], [](auto x, auto y) {
-                return x + (float)y;
-            });
+            sum_data[min_idx] += data[px];
             classifies[px] = centroids[min_idx];
         }
         for (size_t mean_idx = 0; mean_idx < k_clusters; mean_idx++) {
-            for (size_t comp = 0; comp < 4; comp++) {
-                uint8_t temp = (uint8_t)(sum_data[mean_idx][comp] / count[mean_idx]);
-                if (temp != centroids[mean_idx][comp]) change = true;
-                centroids[mean_idx][comp] = temp;
-                sum_data[mean_idx][comp] = 0.f;
-            }
+            RowVectorX<float> new_centroid_float(sum_data[mean_idx] / count[mean_idx]);
+            const RowVectorX<uint8_t> new_centroid(new_centroid_float.size(),
+                    [&new_centroid_float](size_t i) -> uint8_t { return uint8_t(new_centroid_float[i]); });
+            if (new_centroid != centroids[mean_idx]) change = true;
+            centroids[mean_idx] = new_centroid;
+            sum_data[mean_idx] = 0.f;
         }
         delete[] count;
         if (!change) break;
     }
     printf("Finish at %zu iterations\n", img_idx);
-    printf("%s\n, width: %d, height: %d\n", file_out, width, height);
+    printf("%s, width: %d, height: %d\n", file_out, width, height);
     stbi_write_png(file_out, width, height, 4, classifies.data, 0);
     return 0;
 }
