@@ -27,18 +27,32 @@ public:
     using BiTypeFunc    = std::function<Type(Type, Op2Type)>;
     using UnaryTypeFunc = std::function<Type(Type)>;
     virtual ~MatrixX() {
-        if (!borrowed_data) delete[] data;
+        if (!borrowed_data) free(data);
     }
     explicit MatrixX(size_t Rows, size_t Cols):
-        nRows         { Rows                   },
-        nCols         { Cols                   },
-        data          { new Type[Rows*Cols] {} },
-        borrowed_data { false                  }{
+        nRows         { Rows                                  },
+        nCols         { Cols                                  },
+        data          { (Type*)malloc(Rows*Cols*sizeof(Type)) },
+        borrowed_data { false                                 } {
+            assert(this->data != nullptr && "Buy more ram lol");
             memset(data, 0, nRows*nCols);
     }
 
     MatrixX(const MatrixX& base): MatrixX(base.nRows, base.nCols) {
         memcpy(this->data, base.data, nRows*nCols*sizeof(Type));
+    }
+
+    explicit MatrixX(std::initializer_list<RowVectorX<Type>> rows) {
+        assert(rows.size() != 0);
+        this->nRows = rows.size();
+        this->nCols = rows.begin()->size();
+        this->data = (Type*)malloc(nRows*nCols*sizeof(Type));
+        assert(this->data != nullptr && "Buy more ram lol");
+        size_t count = 0;
+        for (const auto& row : rows) {
+            assert(row.size() == this->nCols && "Every row must have the same number of elements");
+            memcpy(this->data + (count++) * this->nCols, row.data, this->nCols*sizeof(Type));
+        }
     }
 
     explicit MatrixX(size_t Rows, size_t Cols, Type val): MatrixX(Rows, Cols) {
@@ -81,11 +95,14 @@ public:
 
     inline size_t size() const { return nRows*nCols; }
 
+    inline void resize(size_t rows, size_t cols) {
+        this->data = realloc(this->data, rows*cols*sizeof(Type));
+        assert(this->data != nullptr && "Buy more ram lol");
+    }
+
     inline const MatrixX& replace_with(const MatrixX& object) {
-        this->nRows = object.nRows;
-        this->nCols = object.nCols;
-        delete[] this->data;
-        this->data = new Type[object.size()];
+        if (this->nRows != object.nRows || this->nCols != object.nCols)
+            resize(object.nRows, object.nCols);
         memcpy(this->data, object.data, object.size()*sizeof(Type));
         return *this;
     }
@@ -101,7 +118,7 @@ public:
 
     inline const MatrixX& operator=(const MatrixX& object) {
         assert(this->nRows == object.nRows && this->nCols == object.nCols);
-        memcpy(this->data, object.data, nRows*nCols);
+        memcpy(this->data, object.data, nRows*nCols*sizeof(Type));
         return *this;
     }
 
@@ -244,10 +261,11 @@ public:
     explicit RowVectorX(const MatrixX<Type>& base)                                      : Base(base) {}
     explicit RowVectorX(size_t size)                                                    : Base(1, size) {}
     explicit RowVectorX(size_t size, Type val)                                          : Base(1, size, val) {}
-    explicit RowVectorX(size_t size, Type* data)                                        : RowVectorX() { memcpy(this->data, data, size*sizeof(Type)); }
+    explicit RowVectorX(size_t size, const Type* data)                                  : RowVectorX(size) { memcpy(this->data, data, size*sizeof(Type)); }
     explicit RowVectorX(size_t size, std::function<Type(size_t r, size_t c)> init_func) : Base(1, size, init_func) {}
-    explicit RowVectorX(size_t size, const OneIndexFunc& init_func)                   : Base(1, size, init_func) {}
+    explicit RowVectorX(size_t size, const OneIndexFunc& init_func)                     : Base(1, size, init_func) {}
     explicit RowVectorX(size_t size, const NoIndexFunc&    init_func)                   : Base(1, size, init_func) {}
+    RowVectorX(std::initializer_list<Type> values)                             : RowVectorX(values.size(), std::data(values)) {}
 
     inline       Type&  operator[](size_t index)       { return this->at(0, index); }
     inline const Type&  operator[](size_t index) const { return this->at(0, index); }
@@ -282,12 +300,12 @@ public:
     VectorX(const VectorX& base)                                                     : Base(base) {}
     explicit VectorX(size_t size)                                                    : Base(size, 1) {}
     explicit VectorX(size_t size, Type val)                                          : Base(size, 1, val) {}
-    explicit VectorX(size_t size, Type* data)                                        : VectorX()
-        { memcpy(this->data, data, size*sizeof(Type)); }
+    explicit VectorX(size_t size, const Type* data)                                  : VectorX(size) { memcpy(this->data, data, size*sizeof(Type)); }
     explicit VectorX(size_t size, std::function<Type(size_t r, size_t c)> init_func) : Base(size, 1, init_func) {}
-    explicit VectorX(size_t size, const OneIndexFunc& init_func)                   : Base(size, 1, init_func) {}
+    explicit VectorX(size_t size, const OneIndexFunc& init_func)                     : Base(size, 1, init_func) {}
     explicit VectorX(size_t size, const NoIndexFunc&    init_func)                   : Base(size, 1, init_func) {}
     explicit VectorX(const MatrixX<Type>& base)                                      : Base(base) {}
+    explicit VectorX(std::initializer_list<Type> values)                             : VectorX(values.size(), std::data(values)) {}
 
     inline       Type&  operator[](size_t index)       { return this->at(index, 0); }
     inline const Type&  operator[](size_t index) const { return this->at(index, 0); }
