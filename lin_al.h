@@ -1,4 +1,5 @@
 #pragma once
+#include <iostream>
 #include <cassert>
 #include <functional>
 #include <cstring>
@@ -35,7 +36,7 @@ public:
         data          { (Type*)malloc(Rows*Cols*sizeof(Type)) },
         borrowed_data { false                                 } {
             assert(this->data != nullptr && "Buy more ram lol");
-            memset(data, 0, nRows*nCols);
+            memset(data, 0, nRows*nCols*sizeof(Type));
     }
 
     MatrixX(const MatrixX& base): MatrixX(base.nRows, base.nCols) {
@@ -96,7 +97,9 @@ public:
     inline size_t size() const { return nRows*nCols; }
 
     inline void resize(size_t rows, size_t cols) {
-        this->data = realloc(this->data, rows*cols*sizeof(Type));
+        this->data = (Type*) realloc(this->data, rows*cols*sizeof(Type));
+        this->nRows = rows;
+        this->nCols = cols;
         assert(this->data != nullptr && "Buy more ram lol");
     }
 
@@ -221,7 +224,6 @@ public:
         ss << (*this);
         return ss.str();
     }
-    inline operator VectorX<Type>() const { return VectorX(*this); } // OK if done through typedef
 
     size_t nRows;
     size_t nCols;
@@ -257,15 +259,15 @@ public:
     using Base::operator*=;
     using Base::operator/=;
     using Base::size;
-    RowVectorX(const RowVectorX& base)                                                  : Base(base) {}
-    explicit RowVectorX(const MatrixX<Type>& base)                                      : Base(base) {}
+    RowVectorX(const RowVectorX& base)                                                  : Base(base) { assert(base.nRows == 1); }
+    RowVectorX(std::initializer_list<Type> values)                                      : RowVectorX(values.size(), std::data(values)) {}
+    RowVectorX(const MatrixX<Type>& base)                                               : Base(base) {}
     explicit RowVectorX(size_t size)                                                    : Base(1, size) {}
     explicit RowVectorX(size_t size, Type val)                                          : Base(1, size, val) {}
     explicit RowVectorX(size_t size, const Type* data)                                  : RowVectorX(size) { memcpy(this->data, data, size*sizeof(Type)); }
     explicit RowVectorX(size_t size, std::function<Type(size_t r, size_t c)> init_func) : Base(1, size, init_func) {}
     explicit RowVectorX(size_t size, const OneIndexFunc& init_func)                     : Base(1, size, init_func) {}
     explicit RowVectorX(size_t size, const NoIndexFunc&    init_func)                   : Base(1, size, init_func) {}
-    RowVectorX(std::initializer_list<Type> values)                             : RowVectorX(values.size(), std::data(values)) {}
 
     inline       Type&  operator[](size_t index)       { return this->at(0, index); }
     inline const Type&  operator[](size_t index) const { return this->at(0, index); }
@@ -298,14 +300,14 @@ public:
     using Base::operator/=;
     using Base::size;
     VectorX(const VectorX& base)                                                     : Base(base) {}
+    VectorX(const MatrixX<Type>& base)                                               : Base(base) { assert(base.nCols == 1); }
+    VectorX(std::initializer_list<Type> values)                                      : VectorX(values.size(), std::data(values)) {}
     explicit VectorX(size_t size)                                                    : Base(size, 1) {}
     explicit VectorX(size_t size, Type val)                                          : Base(size, 1, val) {}
     explicit VectorX(size_t size, const Type* data)                                  : VectorX(size) { memcpy(this->data, data, size*sizeof(Type)); }
     explicit VectorX(size_t size, std::function<Type(size_t r, size_t c)> init_func) : Base(size, 1, init_func) {}
     explicit VectorX(size_t size, const OneIndexFunc& init_func)                     : Base(size, 1, init_func) {}
     explicit VectorX(size_t size, const NoIndexFunc&    init_func)                   : Base(size, 1, init_func) {}
-    explicit VectorX(const MatrixX<Type>& base)                                      : Base(base) {}
-    explicit VectorX(std::initializer_list<Type> values)                             : VectorX(values.size(), std::data(values)) {}
 
     inline       Type&  operator[](size_t index)       { return this->at(index, 0); }
     inline const Type&  operator[](size_t index) const { return this->at(index, 0); }
